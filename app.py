@@ -32,7 +32,6 @@ def guardar_o_actualizar_fila(fila, sheet, data, headers):
             sheet.update(f"A{i}:{chr(65+len(headers)-1)}{i}", [valores_ordenados])
             return
 
-    # Si no se encuentra el ID, agregar al final
     sheet.append_row(list(fila.values()))
 
 def eliminar_fila_por_id(id_a_eliminar, sheet):
@@ -50,10 +49,30 @@ def eliminar_fila_por_id(id_a_eliminar, sheet):
 
 def cargar_datos_guardados(sheet):
     try:
-        data = sheet.get_all_records(expected_headers=["id", "cartuchos", "yo_ayude", "me_ayudaron", "cct", "fecha", "total", "guardado"])
+        data = sheet.get_all_records(expected_headers=[
+            "id", "cartuchos", "yo_ayude", "me_ayudaron", "cct",
+            "fecha", "total", "guardado", "historico"
+        ])
     except:
         data = []
-    return data
+
+    # Solo incluir los que no están marcados como históricos
+    activos = [row for row in data if not str(row.get("historico", "False")).upper() == "TRUE"]
+    return activos
+
+def marcar_como_historico(sheet):
+    data = sheet.get_all_values()
+    if not data:
+        return
+    headers = data[0]
+    if "id" not in headers or "historico" not in headers:
+        return
+    id_idx = headers.index("id")
+    hist_idx = headers.index("historico")
+
+    for i, row in enumerate(data[1:], start=2):
+        if len(row) > hist_idx and row[hist_idx].upper() != "TRUE":
+            sheet.update_cell(i, hist_idx + 1, "TRUE")
 
 # --- CONECTAR UNA SOLA VEZ ---
 sheet = conectar_sheet()
@@ -80,13 +99,16 @@ valores_cirugia = {
     "Bypass en Y de Roux": 6000
 }
 
-# --- RESET VISUAL ---
+# --- RESET VISUAL PERSISTENTE ---
 def reset_all():
+    marcar_como_historico(sheet)
     st.session_state.rows = []
     st.session_state.remove_row = None
     st.session_state.newly_added = []
 
-st.button("🔄 Resetear Todo (visual)", on_click=reset_all)
+if st.button("🔄 Resetear Todo (visual)"):
+    reset_all()
+    st.rerun()
 
 # --- AGREGAR FILA ---
 if st.button("➕ Agregar Fila"):
@@ -99,7 +121,8 @@ if st.button("➕ Agregar Fila"):
         "cct": False,
         "fecha": datetime.date.today().isoformat(),
         "total": 0,
-        "guardado": False
+        "guardado": False,
+        "historico": False
     }
     st.session_state.rows.append(nueva_fila)
     st.session_state.newly_added.append(new_id)
@@ -170,10 +193,11 @@ for i in range(len(st.session_state.rows)):
         "cct": cct,
         "fecha": row["fecha"],
         "total": subtotal,
-        "guardado": True
+        "guardado": True,
+        "historico": False
     }
 
-    # Guardar o actualizar en Sheets (solo una lectura global por ejecución)
+    # Guardar o actualizar en Sheets
     guardar_o_actualizar_fila(st.session_state.rows[i], sheet, sheet_data, sheet_headers)
 
 # --- ELIMINAR FILA DEL HISTORIAL Y VISTA ---
