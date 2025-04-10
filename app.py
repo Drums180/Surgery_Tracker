@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import os
 import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import uuid
+import json
+from io import StringIO
+from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config(page_title="Calculadora de Ayuda", layout="wide")
 
@@ -12,13 +13,15 @@ st.set_page_config(page_title="Calculadora de Ayuda", layout="wide")
 SHEET_ID = "1f_s9z21hlyg3puVEpdMYIBow4GQdI8QhG__ABEJAwBI"
 HOJA = "Tracker"
 
-# --- FUNCIONES GOOGLE SHEETS ---
+# --- CONEXIÓN A GOOGLE SHEETS DESDE SECRETS ---
 def conectar_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    GOOGLE_CREDENTIALS = json.load(StringIO(st.secrets["GOOGLE_CREDENTIALS"]))
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDENTIALS, scope)
     client = gspread.authorize(creds)
     return client.open_by_key(SHEET_ID).worksheet(HOJA)
 
+# --- FUNCIONES DE GOOGLE SHEETS ---
 def guardar_o_actualizar_fila(fila, sheet, data, headers):
     try:
         id_index = headers.index("id")
@@ -56,7 +59,6 @@ def cargar_datos_guardados(sheet):
     except:
         data = []
 
-    # Solo incluir los que no están marcados como históricos
     activos = [row for row in data if not str(row.get("historico", "False")).upper() == "TRUE"]
     return activos
 
@@ -74,7 +76,7 @@ def marcar_como_historico(sheet):
         if len(row) > hist_idx and row[hist_idx].upper() != "TRUE":
             sheet.update_cell(i, hist_idx + 1, "TRUE")
 
-# --- CONECTAR UNA SOLA VEZ ---
+# --- CONEXIÓN Y DATOS ---
 sheet = conectar_sheet()
 sheet_data = sheet.get_all_values()
 sheet_headers = sheet_data[0] if sheet_data else []
@@ -89,7 +91,7 @@ if "remove_row" not in st.session_state:
 if "newly_added" not in st.session_state:
     st.session_state.newly_added = []
 
-# --- OPCIONES ---
+# --- OPCIONES DE CIRUGÍA ---
 cirugias = ["No cirugía", "Manga", "Manga con Biparticion", "Minibypass", "Bypass en Y de Roux"]
 valores_cirugia = {
     "No cirugía": 0,
@@ -99,7 +101,7 @@ valores_cirugia = {
     "Bypass en Y de Roux": 6000
 }
 
-# --- RESET VISUAL PERSISTENTE ---
+# --- BOTÓN RESET VISUAL ---
 def reset_all():
     marcar_como_historico(sheet)
     st.session_state.rows = []
@@ -110,7 +112,7 @@ if st.button("🔄 Resetear Todo (visual)"):
     reset_all()
     st.rerun()
 
-# --- AGREGAR FILA ---
+# --- BOTÓN PARA AGREGAR FILA ---
 if st.button("➕ Agregar Fila"):
     new_id = str(uuid.uuid4())
     nueva_fila = {
@@ -128,9 +130,9 @@ if st.button("➕ Agregar Fila"):
     st.session_state.newly_added.append(new_id)
     st.rerun()
 
+# --- MOSTRAR LAS FILAS ACTIVAS ---
 total = 0
 
-# --- MOSTRAR FILAS EN APP ---
 for i in range(len(st.session_state.rows)):
     row = st.session_state.rows[i]
 
@@ -197,10 +199,9 @@ for i in range(len(st.session_state.rows)):
         "historico": False
     }
 
-    # Guardar o actualizar en Sheets
     guardar_o_actualizar_fila(st.session_state.rows[i], sheet, sheet_data, sheet_headers)
 
-# --- ELIMINAR FILA DEL HISTORIAL Y VISTA ---
+# --- ELIMINAR FILA COMPLETAMENTE ---
 if st.session_state.remove_row is not None:
     index = st.session_state.remove_row
     if 0 <= index < len(st.session_state.rows):
@@ -210,6 +211,6 @@ if st.session_state.remove_row is not None:
     st.session_state.remove_row = None
     st.rerun()
 
-# --- TOTAL GLOBAL ---
+# --- MOSTRAR TOTAL FINAL ---
 st.markdown("---")
 st.subheader(f"💰 Total: ${total:,}")
