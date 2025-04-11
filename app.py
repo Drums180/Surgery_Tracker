@@ -166,7 +166,7 @@ for i in range(len(st.session_state.rows)):
             )
 
     with col4:
-        cct_valor = str(row["cct"]).upper() == "TRUE"
+        cct_valor = str(row.get("cct", "FALSE")).strip().upper() == "TRUE"
         cct = st.toggle("CCT", value=cct_valor, key=f"cct_{i}")
 
     with col5:
