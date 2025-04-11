@@ -166,7 +166,8 @@ for i in range(len(st.session_state.rows)):
             )
 
     with col4:
-        cct = st.toggle("CCT", value=row["cct"], key=f"cct_{i}")
+        cct_valor = str(row["cct"]).upper() == "TRUE"
+        cct = st.toggle("CCT", value=cct_valor, key=f"cct_{i}")
 
     with col5:
         if st.button("➖", key=f"delete_button_{i}"):
